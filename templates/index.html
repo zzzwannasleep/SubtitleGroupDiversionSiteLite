@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- RSS 订阅信息 -->
+<div class="rss-box">
+    <h3>📡 RSS 自动下载</h3>
+    <p>将以下RSS链接添加到qBittorrent中即可自动下载种子：</p>
+    <div class="rss-url">{{ request.url_root }}rss.xml</div>
+    <p style="margin-top: 10px; font-size: 0.9em; color: #bdc3c7;">
+        在qBittorrent中：工具 → RSS阅读器 → 新建订阅 → 粘贴上方链接
+    </p>
+</div>
+
+<!-- 种子列表 -->
+<div class="card">
+    <div class="card-header">
+        <h2>🧲 最新种子</h2>
+    </div>
+    
+    {% if torrents %}
+        {% for torrent in torrents %}
+        <div class="torrent-item">
+            <h3>{{ torrent.title }}</h3>
+            <div class="torrent-meta">
+                <span>📂 {{ torrent.category or '未分类' }}</span>
+                <span>👤 {{ torrent.publisher_name }}</span>
+                <span>📅 {{ torrent.created_at[:19] }}</span>
+                <span>📦 {{ (torrent.file_size / 1024 / 1024) | round(2) }} MB</span>
+            </div>
+            {% if torrent.description %}
+            <div class="torrent-description">{{ torrent.description }}</div>
+            {% endif %}
+            <a href="{{ url_for('download', torrent_id=torrent.id) }}" class="btn btn-primary">
+                ⬇️ 下载种子
+            </a>
+        </div>
+        {% endfor %}
+    {% else %}
+        <p style="text-align: center; color: #666; padding: 40px;">暂无种子，请等待发布员上传或<a href="{{ url_for('upload') }}">自己发布</a></p>
+    {% endif %}
+</div>
+{% endblock %}

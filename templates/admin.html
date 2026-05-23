@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}管理后台 - RSS种子站点{% endblock %}
+
+{% block content %}
+<!-- 用户管理 -->
+<div class="card">
+    <div class="card-header">
+        <h2>👥 用户管理</h2>
+    </div>
+    
+    <table class="table">
+        <thead>
+            <tr>
+                <th>用户名</th>
+                <th>角色</th>
+                <th>注册时间</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            <tr>
+                <td>{{ user.username }}</td>
+                <td>
+                    {% if user.role == 'admin' %}
+                        <span style="color: #e74c3c; font-weight: bold;">管理员</span>
+                    {% elif user.role == 'publisher' %}
+                        <span style="color: #27ae60; font-weight: bold;">发布员</span>
+                    {% else %}
+                        <span style="color: #666;">普通用户</span>
+                    {% endif %}
+                </td>
+                <td>{{ user.created_at[:19] }}</td>
+                <td>
+                    {% if user.username != 'admin' %}
+                        {% if user.role != 'publisher' %}
+                        <a href="{{ url_for('set_role', user_id=user.id, role='publisher') }}" class="btn btn-success btn-sm">设为发布员</a>
+                        {% else %}
+                        <a href="{{ url_for('set_role', user_id=user.id, role='user') }}" class="btn btn-warning btn-sm">取消发布员</a>
+                        {% endif %}
+                        
+                        {% if user.role != 'admin' %}
+                        <a href="{{ url_for('set_role', user_id=user.id, role='admin') }}" class="btn btn-danger btn-sm">设为管理员</a>
+                        {% endif %}
+                    {% else %}
+                        <span style="color: #999;">默认管理员</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- 种子管理 -->
+<div class="card">
+    <div class="card-header">
+        <h2>🧲 种子管理</h2>
+    </div>
+    
+    <table class="table">
+        <thead>
+            <tr>
+                <th>标题</th>
+                <th>分类</th>
+                <th>发布者</th>
+                <th>发布时间</th>
+                <th>大小</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for torrent in torrents %}
+            <tr>
+                <td>{{ torrent.title }}</td>
+                <td>{{ torrent.category or '未分类' }}</td>
+                <td>{{ torrent.publisher_name }}</td>
+                <td>{{ torrent.created_at[:19] }}</td>
+                <td>{{ (torrent.file_size / 1024 / 1024) | round(2) }} MB</td>
+                <td>
+                    <a href="{{ url_for('download', torrent_id=torrent.id) }}" class="btn btn-primary btn-sm">下载</a>
+                    <a href="{{ url_for('delete_torrent', torrent_id=torrent.id) }}" class="btn btn-danger btn-sm" onclick="return confirm('确定删除这个种子吗？')">删除</a>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="6" style="text-align: center; color: #666;">暂无种子</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- RSS信息 -->
+<div class="card">
+    <div class="card-header">
+        <h2>📡 RSS信息</h2>
+    </div>
+    <p><strong>RSS地址：</strong></p>
+    <div class="rss-url" style="background: #f8f9fa; padding: 10px; border-radius: 4px; font-family: monospace; word-break: break-all;">
+        {{ request.url_root }}rss.xml
+    </div>
+    <p style="margin-top: 15px;"><strong>种子总数：</strong> {{ torrents|length }}</p>
+    <p><strong>用户总数：</strong> {{ users|length }}</p>
+</div>
+{% endblock %}

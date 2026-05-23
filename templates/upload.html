@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}发布种子 - RSS种子站点{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 600px; margin: 0 auto;">
+    <div class="card-header">
+        <h2>📤 发布种子</h2>
+    </div>
+    
+    <form method="POST" action="{{ url_for('upload') }}" enctype="multipart/form-data">
+        <div class="form-group">
+            <label>种子标题 *</label>
+            <input type="text" name="title" class="form-control" required placeholder="输入种子标题">
+        </div>
+        
+        <div class="form-group">
+            <label>分类</label>
+            <select name="category" class="form-control">
+                <option value="general">综合</option>
+                <option value="movie">电影</option>
+                <option value="tv">电视剧</option>
+                <option value="anime">动漫</option>
+                <option value="music">音乐</option>
+                <option value="game">游戏</option>
+                <option value="software">软件</option>
+                <option value="other">其他</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label>描述</label>
+            <textarea name="description" class="form-control" placeholder="可选：输入种子描述"></textarea>
+        </div>
+        
+        <div class="form-group">
+            <label>种子文件 *</label>
+            <input type="file" name="torrent" class="form-control" accept=".torrent" required>
+            <small style="color: #666;">仅支持 .torrent 文件，最大 16MB</small>
+        </div>
+        
+        <button type="submit" class="btn btn-success" style="width: 100%;">发布种子</button>
+    </form>
+</div>
+{% endblock %}

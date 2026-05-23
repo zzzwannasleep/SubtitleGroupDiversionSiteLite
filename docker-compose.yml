@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  rss-torrent:
+    build: .
+    container_name: rss-torrent-site
+    restart: always
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+      - ./.env:/app/.env:ro
+    environment:
+      - FLASK_ENV=production
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

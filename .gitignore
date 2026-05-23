@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# 配置（包含敏感信息）
+.env
+
+# 数据
+*.db
+*.sqlite
+*.sqlite3
+data/
+
+# 上传文件
+uploads/*
+!uploads/.gitkeep
+
+# 日志
+logs/*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# 其他
+*.bak
+*.tmp

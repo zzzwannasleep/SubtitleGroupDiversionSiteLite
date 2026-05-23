@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}注册 - RSS种子站点{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 400px; margin: 50px auto;">
+    <div class="card-header">
+        <h2>📝 用户注册</h2>
+    </div>
+    
+    <form method="POST" action="{{ url_for('register') }}">
+        <div class="form-group">
+            <label>用户名</label>
+            <input type="text" name="username" class="form-control" required placeholder="选择用户名">
+        </div>
+        
+        <div class="form-group">
+            <label>密码</label>
+            <input type="password" name="password" class="form-control" required placeholder="设置密码">
+        </div>
+        
+        <button type="submit" class="btn btn-success" style="width: 100%;">注册</button>
+    </form>
+    
+    <p style="text-align: center; margin-top: 20px;">
+        已有账号？<a href="{{ url_for('login') }}">立即登录</a>
+    </p>
+</div>
+{% endblock %}
