@@ -85,6 +85,8 @@
                 <a href="{{ url_for('index') }}">种子列表</a>
                 <a href="{{ url_for('rss_feed') }}">RSS源</a>
                 
+                <a href="{{ url_for('api_docs') }}">API文档</a>
+                
                 {% if session.user_id %}
                     {% if session.role in ['admin', 'publisher'] %}
                         <a href="{{ url_for('upload') }}">发布种子</a>
@@ -92,6 +94,7 @@
                     {% if session.role == 'admin' %}
                         <a href="{{ url_for('admin') }}">管理后台</a>
                     {% endif %}
+                    <a href="{{ url_for('api_keys') }}">API Keys</a>
                     <span style="color: #bdc3c7;">{{ session.username }} ({{ session.role }})</span>
                     <a href="{{ url_for('logout') }}">退出</a>
                 {% else %}

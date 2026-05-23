@@ -13,6 +13,9 @@
 - 🔐 **用户系统** - 注册/登录，支持三种角色：管理员、发布员、普通用户
 - 📤 **种子发布** - 发布员可上传 `.torrent` 文件，自动分类管理
 - 📡 **RSS订阅** - 自动生成标准RSS feed，支持qBittorrent自动下载
+- 🔌 **API接口** - 完整的RESTful API，支持第三方应用对接
+- 🔑 **API Key管理** - 用户可创建/管理API Key，安全对接外部应用
+- 📚 **API文档** - 内置交互式API文档页面，包含示例代码
 - 🎛️ **管理后台** - 管理员可管理用户权限、删除种子、查看统计
 - 🐳 **多种部署** - 支持Docker、systemd、手动部署等多种方式
 - 💾 **持久存储** - SQLite数据库，数据永久保存
@@ -166,6 +169,37 @@ python -c "import secrets; print(secrets.token_hex(32))"
    - 设置保存路径
    - 勾选 **使用自动下载**
 
+### 6. API 对接（第三方应用）
+
+#### 对接流程
+
+1. **注册账号**并联系管理员设置为**发布员**
+2. 访问 **API Keys** 页面，创建 API Key
+3. **立即复制保存** Key（只显示一次）
+4. 查看 **API文档** (`/api/docs`) 了解接口详情
+5. 在第三方应用中使用 API Key 进行对接
+
+#### 快速示例
+
+```bash
+# 1. 获取站点统计（无需认证）
+curl http://your-domain.com/api/v1/stats
+
+# 2. 获取种子列表
+curl -H "X-API-Key: your-api-key" \
+  http://your-domain.com/api/v1/torrents?page=1&per_page=20
+
+# 3. 上传种子
+curl -X POST \
+  -H "X-API-Key: your-api-key" \
+  -F "torrent=@movie.torrent" \
+  -F "title=电影名称" \
+  -F "category=movie" \
+  http://your-domain.com/api/v1/torrents
+```
+
+**查看完整 API 文档：** 访问 `http://your-domain.com/api/docs`
+
 ## 🛠️ 生产环境管理
 
 ### Systemd服务（Linux）
@@ -286,7 +320,9 @@ tar -xzvf backup-20240101.tar.gz
     ├── login.html            # 登录页
     ├── register.html         # 注册页
     ├── upload.html           # 上传页
-    └── admin.html            # 管理后台
+    ├── admin.html            # 管理后台
+    ├── api_keys.html         # API Key管理
+    └── api_docs.html         # API文档
 ```
 
 ## 🐳 Docker Hub 自动构建

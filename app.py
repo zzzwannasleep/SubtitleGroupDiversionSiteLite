@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory, make_response, session
+from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory, make_response, session, jsonify
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
@@ -9,6 +9,7 @@ import uuid
 import xml.etree.ElementTree as ET
 import sqlite3
 import hashlib
+import secrets
 
 # 加载环境变量
 load_dotenv()
@@ -61,6 +62,20 @@ def init_db():
         )
     ''')
     
+    # API Keys表
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS api_keys (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            key TEXT UNIQUE NOT NULL,
+            name TEXT,
+            created_at TEXT NOT NULL,
+            last_used TEXT,
+            is_active INTEGER DEFAULT 1,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    ''')
+    
     db.commit()
     
     # 创建默认管理员
@@ -83,7 +98,8 @@ def init_db():
 # 初始化数据库
 init_db()
 
-# 权限装饰器
+# ==================== 认证装饰器 ====================
+
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -119,6 +135,61 @@ def publisher_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+def api_auth_required(f):
+    """API认证装饰器 - 通过API Key或Session"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # 优先检查API Key
+        api_key = None
+        
+        # 从Header获取
+        if 'X-API-Key' in request.headers:
+            api_key = request.headers['X-API-Key']
+        # 从Query参数获取
+        elif request.args.get('api_key'):
+            api_key = request.args.get('api_key')
+        # 从JSON body获取
+        elif request.is_json and request.json and 'api_key' in request.json:
+            api_key = request.json['api_key']
+        
+        if api_key:
+            user = get_user_by_api_key(api_key)
+            if user:
+                # 更新最后使用时间
+                update_api_key_last_used(api_key)
+                request.current_user = user
+                request.auth_type = 'api_key'
+                return f(*args, **kwargs)
+            else:
+                return jsonify({'success': False, 'error': 'Invalid API key'}), 401
+        
+        # 如果没有API Key，检查Session（用于浏览器访问）
+        if 'user_id' in session:
+            user = get_user_by_id(session['user_id'])
+            if user:
+                request.current_user = user
+                request.auth_type = 'session'
+                return f(*args, **kwargs)
+        
+        return jsonify({'success': False, 'error': 'Authentication required'}), 401
+    return decorated_function
+
+def api_publisher_required(f):
+    """API发布员权限装饰器"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not hasattr(request, 'current_user'):
+            return jsonify({'success': False, 'error': 'Authentication required'}), 401
+        
+        user = request.current_user
+        if user['role'] not in ['admin', 'publisher']:
+            return jsonify({'success': False, 'error': 'Publisher or admin role required'}), 403
+        
+        return f(*args, **kwargs)
+    return decorated_function
+
+# ==================== 用户和API Key辅助函数 ====================
+
 def get_user_by_id(user_id):
     db = get_db()
     user = db.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
@@ -131,7 +202,42 @@ def get_user_by_username(username):
     db.close()
     return dict(user) if user else None
 
-# 路由：首页（种子列表）
+def get_user_by_api_key(api_key):
+    """通过API Key获取用户"""
+    db = get_db()
+    result = db.execute('''
+        SELECT u.* FROM users u
+        JOIN api_keys k ON u.id = k.user_id
+        WHERE k.key = ? AND k.is_active = 1
+    ''', (api_key,)).fetchone()
+    db.close()
+    return dict(result) if result else None
+
+def update_api_key_last_used(api_key):
+    """更新API Key最后使用时间"""
+    db = get_db()
+    db.execute('UPDATE api_keys SET last_used = ? WHERE key = ?', 
+               (datetime.now().isoformat(), api_key))
+    db.commit()
+    db.close()
+
+def generate_api_key():
+    """生成安全的API Key"""
+    return 'sgd_' + secrets.token_urlsafe(32)
+
+def get_user_api_keys(user_id):
+    """获取用户的所有API Keys"""
+    db = get_db()
+    keys = db.execute('''
+        SELECT * FROM api_keys 
+        WHERE user_id = ? 
+        ORDER BY created_at DESC
+    ''', (user_id,)).fetchall()
+    db.close()
+    return [dict(k) for k in keys]
+
+# ==================== 页面路由 ====================
+
 @app.route('/')
 def index():
     db = get_db()
@@ -142,7 +248,6 @@ def index():
     db.close()
     return render_template('index.html', torrents=[dict(t) for t in torrents])
 
-# 路由：注册
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
@@ -176,7 +281,6 @@ def register():
     
     return render_template('register.html')
 
-# 路由：登录
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -196,14 +300,14 @@ def login():
     
     return render_template('login.html')
 
-# 路由：登出
 @app.route('/logout')
 def logout():
     session.clear()
     flash('已退出登录', 'info')
     return redirect(url_for('index'))
 
-# 路由：上传种子（仅发布员和管理员）
+# ==================== 上传和下载 ====================
+
 @app.route('/upload', methods=['GET', 'POST'])
 @publisher_required
 def upload():
@@ -258,7 +362,6 @@ def upload():
     
     return render_template('upload.html')
 
-# 路由：下载种子
 @app.route('/download/<torrent_id>')
 def download(torrent_id):
     db = get_db()
@@ -277,7 +380,8 @@ def download(torrent_id):
         download_name=torrent['original_filename']
     )
 
-# 路由：RSS Feed
+# ==================== RSS Feed ====================
+
 @app.route('/rss.xml')
 def rss_feed():
     db = get_db()
@@ -319,7 +423,7 @@ def rss_feed():
         ET.SubElement(item, 'pubDate').text = datetime.fromisoformat(torrent['created_at']).strftime('%a, %d %b %Y %H:%M:%S +0800')
         ET.SubElement(item, 'guid').text = torrent['id']
         
-        # enclosure标签（qBittorrent用它来识别种子文件）
+        # enclosure标签
         enclosure = ET.SubElement(item, 'enclosure')
         enclosure.set('url', url_for('download', torrent_id=torrent['id'], _external=True))
         enclosure.set('length', str(torrent['file_size']))
@@ -338,7 +442,8 @@ def rss_feed():
     response.headers['Content-Type'] = 'application/rss+xml; charset=utf-8'
     return response
 
-# 路由：管理后台
+# ==================== 管理后台 ====================
+
 @app.route('/admin')
 @admin_required
 def admin():
@@ -351,7 +456,6 @@ def admin():
                          users=[dict(u) for u in users], 
                          torrents=[dict(t) for t in torrents])
 
-# 路由：设置用户权限
 @app.route('/admin/set_role/<user_id>/<role>')
 @admin_required
 def set_role(user_id, role):
@@ -376,7 +480,6 @@ def set_role(user_id, role):
     flash(f'已将 {user["username"]} 设置为 {role}', 'success')
     return redirect(url_for('admin'))
 
-# 路由：删除种子
 @app.route('/admin/delete_torrent/<torrent_id>')
 @admin_required
 def delete_torrent(torrent_id):
@@ -399,6 +502,333 @@ def delete_torrent(torrent_id):
     
     db.close()
     return redirect(url_for('admin'))
+
+# ==================== API Key 管理 ====================
+
+@app.route('/api-keys')
+@login_required
+def api_keys():
+    """API Key管理页面"""
+    keys = get_user_api_keys(session['user_id'])
+    return render_template('api_keys.html', api_keys=keys)
+
+@app.route('/api-keys/create', methods=['POST'])
+@login_required
+def create_api_key():
+    """创建新的API Key"""
+    name = request.form.get('name', 'Default')
+    
+    db = get_db()
+    api_key = generate_api_key()
+    db.execute('''
+        INSERT INTO api_keys (id, user_id, key, name, created_at)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (
+        str(uuid.uuid4()),
+        session['user_id'],
+        api_key,
+        name,
+        datetime.now().isoformat()
+    ))
+    db.commit()
+    db.close()
+    
+    flash(f'API Key 创建成功！请立即复制保存，这是唯一一次显示：{api_key}', 'success')
+    return redirect(url_for('api_keys'))
+
+@app.route('/api-keys/delete/<key_id>')
+@login_required
+def delete_api_key(key_id):
+    """删除API Key"""
+    db = get_db()
+    # 确保只能删除自己的key
+    db.execute('DELETE FROM api_keys WHERE id = ? AND user_id = ?', 
+               (key_id, session['user_id']))
+    db.commit()
+    db.close()
+    
+    flash('API Key 已删除', 'info')
+    return redirect(url_for('api_keys'))
+
+# ==================== API 文档页面 ====================
+
+@app.route('/api/docs')
+def api_docs():
+    """API文档页面"""
+    base_url = request.url_root.rstrip('/')
+    return render_template('api_docs.html', base_url=base_url)
+
+# ==================== API 端点 ====================
+
+@app.route('/api/v1/torrents', methods=['GET'])
+@api_auth_required
+def api_get_torrents():
+    """获取种子列表"""
+    try:
+        # 分页参数
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
+        per_page = min(per_page, 100)  # 最大100条
+        
+        # 分类过滤
+        category = request.args.get('category')
+        
+        # 搜索
+        search = request.args.get('search')
+        
+        db = get_db()
+        
+        # 构建查询
+        query = 'SELECT * FROM torrents WHERE 1=1'
+        params = []
+        
+        if category:
+            query += ' AND category = ?'
+            params.append(category)
+        
+        if search:
+            query += ' AND (title LIKE ? OR description LIKE ?)'
+            params.extend([f'%{search}%', f'%{search}%'])
+        
+        # 获取总数
+        count_query = query.replace('SELECT *', 'SELECT COUNT(*) as total')
+        total = db.execute(count_query, params).fetchone()['total']
+        
+        # 获取分页数据
+        query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?'
+        params.extend([per_page, (page - 1) * per_page])
+        
+        torrents = db.execute(query, params).fetchall()
+        db.close()
+        
+        # 构建响应
+        results = []
+        for t in torrents:
+            t = dict(t)
+            results.append({
+                'id': t['id'],
+                'title': t['title'],
+                'description': t['description'],
+                'category': t['category'],
+                'file_size': t['file_size'],
+                'file_size_human': f"{t['file_size'] / 1024 / 1024:.2f} MB",
+                'created_at': t['created_at'],
+                'publisher_name': t['publisher_name'],
+                'download_url': url_for('download', torrent_id=t['id'], _external=True)
+            })
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'torrents': results,
+                'pagination': {
+                    'page': page,
+                    'per_page': per_page,
+                    'total': total,
+                    'total_pages': (total + per_page - 1) // per_page
+                }
+            }
+        })
+    
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/v1/torrents', methods=['POST'])
+@api_auth_required
+@api_publisher_required
+def api_upload_torrent():
+    """通过API上传种子"""
+    try:
+        # 获取数据
+        if request.content_type and 'multipart/form-data' in request.content_type:
+            # 表单上传
+            title = request.form.get('title')
+            description = request.form.get('description', '')
+            category = request.form.get('category', 'general')
+            
+            if 'torrent' not in request.files:
+                return jsonify({'success': False, 'error': 'No torrent file provided'}), 400
+            
+            file = request.files['torrent']
+            if file.filename == '':
+                return jsonify({'success': False, 'error': 'No torrent file selected'}), 400
+        else:
+            # JSON上传（需要提供URL或base64）
+            data = request.get_json()
+            if not data:
+                return jsonify({'success': False, 'error': 'No data provided'}), 400
+            
+            title = data.get('title')
+            description = data.get('description', '')
+            category = data.get('category', 'general')
+            
+            # 这里可以扩展支持URL下载或base64解码
+            return jsonify({'success': False, 'error': 'Please use multipart/form-data to upload torrent files'}), 400
+        
+        if not title:
+            return jsonify({'success': False, 'error': 'Title is required'}), 400
+        
+        # 保存文件
+        filename = secure_filename(file.filename)
+        unique_filename = f"{uuid.uuid4()}_{filename}"
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+        file.save(file_path)
+        
+        # 保存到数据库
+        torrent_id = str(uuid.uuid4())
+        db = get_db()
+        db.execute('''
+            INSERT INTO torrents (id, title, description, category, filename, 
+                                original_filename, file_size, created_at, 
+                                publisher_id, publisher_name)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            torrent_id,
+            title,
+            description,
+            category,
+            unique_filename,
+            filename,
+            os.path.getsize(file_path),
+            datetime.now().isoformat(),
+            request.current_user['id'],
+            request.current_user['username']
+        ))
+        db.commit()
+        db.close()
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'id': torrent_id,
+                'title': title,
+                'download_url': url_for('download', torrent_id=torrent_id, _external=True),
+                'message': 'Torrent uploaded successfully'
+            }
+        }), 201
+    
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/v1/torrents/<torrent_id>', methods=['GET'])
+@api_auth_required
+def api_get_torrent(torrent_id):
+    """获取单个种子详情"""
+    try:
+        db = get_db()
+        torrent = db.execute('SELECT * FROM torrents WHERE id = ?', (torrent_id,)).fetchone()
+        db.close()
+        
+        if not torrent:
+            return jsonify({'success': False, 'error': 'Torrent not found'}), 404
+        
+        t = dict(torrent)
+        return jsonify({
+            'success': True,
+            'data': {
+                'id': t['id'],
+                'title': t['title'],
+                'description': t['description'],
+                'category': t['category'],
+                'file_size': t['file_size'],
+                'file_size_human': f"{t['file_size'] / 1024 / 1024:.2f} MB",
+                'created_at': t['created_at'],
+                'publisher_name': t['publisher_name'],
+                'download_url': url_for('download', torrent_id=t['id'], _external=True)
+            }
+        })
+    
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/v1/categories', methods=['GET'])
+def api_get_categories():
+    """获取所有分类"""
+    try:
+        db = get_db()
+        categories = db.execute('''
+            SELECT category, COUNT(*) as count 
+            FROM torrents 
+            GROUP BY category 
+            ORDER BY count DESC
+        ''').fetchall()
+        db.close()
+        
+        return jsonify({
+            'success': True,
+            'data': [dict(c) for c in categories]
+        })
+    
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/v1/stats', methods=['GET'])
+def api_get_stats():
+    """获取站点统计信息"""
+    try:
+        db = get_db()
+        
+        total_torrents = db.execute('SELECT COUNT(*) as count FROM torrents').fetchone()['count']
+        total_users = db.execute('SELECT COUNT(*) as count FROM users').fetchone()['count']
+        total_size = db.execute('SELECT COALESCE(SUM(file_size), 0) as total FROM torrents').fetchone()['total']
+        
+        # 最近24小时上传数
+        from datetime import timedelta
+        yesterday = (datetime.now() - timedelta(days=1)).isoformat()
+        recent_torrents = db.execute(
+            'SELECT COUNT(*) as count FROM torrents WHERE created_at > ?', 
+            (yesterday,)
+        ).fetchone()['count']
+        
+        db.close()
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'total_torrents': total_torrents,
+                'total_users': total_users,
+                'total_size': total_size,
+                'total_size_human': f"{total_size / 1024 / 1024 / 1024:.2f} GB",
+                'recent_torrents_24h': recent_torrents,
+                'site_name': os.getenv('SITE_NAME', 'RSS种子站点'),
+                'rss_url': url_for('rss_feed', _external=True)
+            }
+        })
+    
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/v1/user', methods=['GET'])
+@api_auth_required
+def api_get_user():
+    """获取当前用户信息"""
+    try:
+        user = request.current_user
+        return jsonify({
+            'success': True,
+            'data': {
+                'id': user['id'],
+                'username': user['username'],
+                'role': user['role'],
+                'auth_type': getattr(request, 'auth_type', 'unknown')
+            }
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# ==================== 错误处理 ====================
+
+@app.errorhandler(404)
+def not_found(error):
+    if request.path.startswith('/api/'):
+        return jsonify({'success': False, 'error': 'Endpoint not found'}), 404
+    return render_template('index.html'), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    if request.path.startswith('/api/'):
+        return jsonify({'success': False, 'error': 'Internal server error'}), 500
+    return render_template('index.html'), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
