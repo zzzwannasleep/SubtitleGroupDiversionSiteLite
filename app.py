@@ -91,7 +91,8 @@ def init_db():
     
     db.commit()
     
-    # 创建默认管理员
+    # 创建或同步默认管理员密码
+    admin_password = os.getenv('ADMIN_PASSWORD', 'admin')
     admin_exists = db.execute('SELECT 1 FROM users WHERE username = ?', ('admin',)).fetchone()
     if not admin_exists:
         db.execute('''
@@ -100,11 +101,19 @@ def init_db():
         ''', (
             str(uuid.uuid4()),
             'admin',
-            generate_password_hash(os.getenv('ADMIN_PASSWORD', 'admin')),
+            generate_password_hash(admin_password),
             'admin',
             datetime.now().isoformat()
         ))
         db.commit()
+    else:
+        # 同步 .env 中的管理员密码（如果已修改）
+        admin_user = db.execute('SELECT password FROM users WHERE username = ?', ('admin',)).fetchone()
+        if admin_user and not check_password_hash(admin_user['password'], admin_password):
+            db.execute('''
+                UPDATE users SET password = ? WHERE username = ?
+            ''', (generate_password_hash(admin_password), 'admin'))
+            db.commit()
     
     db.close()
 
