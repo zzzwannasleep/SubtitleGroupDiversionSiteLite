@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory, make_response, session, jsonify
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.middleware.proxy_fix import ProxyFix
 from functools import wraps
 from datetime import datetime
 from dotenv import load_dotenv
@@ -18,6 +19,21 @@ app.secret_key = os.getenv('SECRET_KEY', 'change-this-in-production')
 app.config['UPLOAD_FOLDER'] = os.getenv('UPLOAD_FOLDER', 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_FILE_SIZE', 16)) * 1024 * 1024
 app.config['DATABASE'] = os.getenv('DATABASE_PATH', 'data/site.db')
+
+# 反向代理支持
+# 启用 ProxyFix 以正确处理 X-Forwarded-* 头
+app.wsgi_app = ProxyFix(
+    app.wsgi_app,
+    x_for=int(os.getenv('PROXY_FIX_X_FOR', 1)),
+    x_proto=int(os.getenv('PROXY_FIX_X_PROTO', 1)),
+    x_host=int(os.getenv('PROXY_FIX_X_HOST', 1)),
+    x_port=int(os.getenv('PROXY_FIX_X_PORT', 0)),
+    x_prefix=int(os.getenv('PROXY_FIX_X_PREFIX', 0))
+)
+
+# 强制使用 HTTPS（如果通过反向代理访问）
+if os.getenv('PREFERRED_URL_SCHEME'):
+    app.config['PREFERRED_URL_SCHEME'] = os.getenv('PREFERRED_URL_SCHEME')
 
 # 确保目录存在
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
