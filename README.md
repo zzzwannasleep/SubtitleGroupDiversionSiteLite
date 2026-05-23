@@ -198,7 +198,9 @@ curl -X POST \
   http://your-domain.com/api/v1/torrents
 ```
 
-**查看完整 API 文档：** 访问 `http://your-domain.com/api/docs`
+**查看完整 API 文档：**
+- 🌐 **交互式文档**：访问 `http://your-domain.com/api/docs`
+- 📄 **GitHub 文档**：[docs/API.md](docs/API.md)（包含完整参数说明和代码示例）
 
 ## 🛠️ 生产环境管理
 
@@ -304,6 +306,9 @@ tar -xzvf backup-20240101.tar.gz
 ├── run.bat                    # Windows后台运行工具
 ├── README.md                  # 本文件
 ├── LICENSE                    # MIT许可证
+│
+├── docs/                      # 文档
+│   └── API.md                # API接口文档
 │
 ├── deploy/                    # 部署配置
 │   ├── install.sh            # 自动部署脚本
