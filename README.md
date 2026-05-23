@@ -4,6 +4,8 @@
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://python.org)
 [![Flask](https://img.shields.io/badge/Flask-2.0+-green.svg)](https://flask.palletsprojects.com)
+[![Docker](https://img.shields.io/badge/Docker-Hub-blue.svg)](https://hub.docker.com)
+[![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-CI%2FCD-blue.svg)](.github/workflows/docker-build.yml)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## ✨ 功能特性
@@ -18,7 +20,35 @@
 
 ## 🚀 快速开始
 
-### 方式一：Docker部署（推荐）
+### 方式一：Docker Hub镜像部署（最简单）
+
+```bash
+# 1. 直接拉取镜像运行（无需克隆仓库）
+docker pull zzzwannasleep/subtitle-group-diversion-site:latest
+
+# 2. 运行容器
+docker run -d \
+  --name rss-torrent \
+  -p 5000:5000 \
+  -e SECRET_KEY=your-secret-key \
+  -e ADMIN_PASSWORD=your-admin-password \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/uploads:/app/uploads \
+  --restart always \
+  zzzwannasleep/subtitle-group-diversion-site:latest
+
+# 或使用 docker-compose（推荐）
+# 下载 docker-compose.yml 和 .env.example
+curl -O https://raw.githubusercontent.com/zzzwannasleep/SubtitleGroupDiversionSiteLite/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/zzzwannasleep/SubtitleGroupDiversionSiteLite/main/.env.example
+cp .env.example .env
+# 编辑 .env 后启动
+docker-compose up -d
+```
+
+访问 http://localhost:5000
+
+### 方式二：Docker本地构建部署
 
 ```bash
 # 1. 克隆仓库
@@ -38,7 +68,7 @@ docker-compose logs -f
 
 访问 http://localhost:5000
 
-### 方式二：Linux一键部署
+### 方式三：Linux一键部署
 
 ```bash
 # 1. 克隆仓库
@@ -155,6 +185,22 @@ sudo systemctl enable rss-torrent-site
 
 ### Docker管理
 
+**Docker Hub镜像部署：**
+
+```bash
+# 更新到最新镜像
+docker-compose pull
+docker-compose up -d
+
+# 查看日志
+docker-compose logs -f
+
+# 停止
+docker-compose down
+```
+
+**本地构建部署：**
+
 ```bash
 # 查看状态
 docker-compose ps
@@ -241,6 +287,51 @@ tar -xzvf backup-20240101.tar.gz
     ├── register.html         # 注册页
     ├── upload.html           # 上传页
     └── admin.html            # 管理后台
+```
+
+## 🐳 Docker Hub 自动构建
+
+本项目使用 **GitHub Actions** 自动构建 Docker 镜像并推送到 **Docker Hub**。
+
+### 自动构建触发条件
+
+- ✅ `push` 到 `main` 分支
+- ✅ 推送 `v*` 标签（如 `v1.0.0`）
+- ✅ Pull Request（仅构建测试，不推送）
+
+### 配置自动构建
+
+如果你想在自己的仓库启用自动构建：
+
+1. **Fork 本仓库** 或创建新仓库推送代码
+
+2. **配置 GitHub Secrets**：
+   - 打开仓库 → Settings → Secrets and variables → Actions
+   - 添加 `DOCKERHUB_USERNAME`（你的 Docker Hub 用户名）
+   - 添加 `DOCKERHUB_TOKEN`（从 [Docker Hub](https://hub.docker.com/settings/security) 生成的 Token）
+
+3. **获取 Docker Hub Token**：
+   - 访问 https://hub.docker.com/settings/security
+   - 点击 **New Access Token**
+   - 描述填写 "GitHub Actions"
+   - 权限选择 **Read, Write, Delete**
+   - 点击 **Generate** 并复制 Token
+
+4. **推送代码触发构建**：
+   ```bash
+   git push origin main
+   ```
+
+详细配置指南见 [DOCKER_BUILD_GUIDE.md](DOCKER_BUILD_GUIDE.md)
+
+### 镜像标签
+
+自动构建会生成以下标签：
+
+```
+zzzwannasleep/subtitle-group-diversion-site:latest    # 最新版本
+zzzwannasleep/subtitle-group-diversion-site:main      # 分支名
+zzzwannasleep/subtitle-group-diversion-site:v1.0.0    # 版本标签
 ```
 
 ## ❓ 常见问题
