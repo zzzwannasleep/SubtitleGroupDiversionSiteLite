@@ -63,7 +63,6 @@
         <thead>
             <tr>
                 <th>标题</th>
-                <th>分类</th>
                 <th>发布者</th>
                 <th>发布时间</th>
                 <th>大小</th>
@@ -74,7 +73,6 @@
             {% for torrent in torrents %}
             <tr>
                 <td>{{ torrent.title }}</td>
-                <td>{{ torrent.category or '未分类' }}</td>
                 <td>{{ torrent.publisher_name }}</td>
                 <td>{{ torrent.created_at[:19] }}</td>
                 <td>{{ (torrent.file_size / 1024 / 1024) | round(2) }} MB</td>
@@ -85,7 +83,7 @@
             </tr>
             {% else %}
             <tr>
-                <td colspan="6" style="text-align: center; color: #666;">暂无种子</td>
+                <td colspan="5" style="text-align: center; color: #666;">暂无种子</td>
             </tr>
             {% endfor %}
         </tbody>

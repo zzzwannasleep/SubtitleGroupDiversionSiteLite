@@ -22,14 +22,10 @@
         <div class="torrent-item">
             <h3>{{ torrent.title }}</h3>
             <div class="torrent-meta">
-                <span>📂 {{ torrent.category or '未分类' }}</span>
                 <span>👤 {{ torrent.publisher_name }}</span>
                 <span>📅 {{ torrent.created_at[:19] }}</span>
                 <span>📦 {{ (torrent.file_size / 1024 / 1024) | round(2) }} MB</span>
             </div>
-            {% if torrent.description %}
-            <div class="torrent-description">{{ torrent.description }}</div>
-            {% endif %}
             <a href="{{ url_for('download', torrent_id=torrent.id) }}" class="btn btn-primary">
                 ⬇️ 下载种子
             </a>

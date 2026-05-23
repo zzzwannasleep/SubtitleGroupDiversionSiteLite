@@ -8,7 +8,6 @@ import os
 import uuid
 import xml.etree.ElementTree as ET
 import sqlite3
-import hashlib
 import secrets
 
 # 加载环境变量
@@ -46,13 +45,11 @@ def init_db():
         )
     ''')
     
-    # 种子表
+    # 种子表（简化：只有标题和文件）
     db.execute('''
         CREATE TABLE IF NOT EXISTS torrents (
             id TEXT PRIMARY KEY,
             title TEXT NOT NULL,
-            description TEXT,
-            category TEXT DEFAULT 'general',
             filename TEXT NOT NULL,
             original_filename TEXT NOT NULL,
             file_size INTEGER NOT NULL,
@@ -155,7 +152,6 @@ def api_auth_required(f):
         if api_key:
             user = get_user_by_api_key(api_key)
             if user:
-                # 更新最后使用时间
                 update_api_key_last_used(api_key)
                 request.current_user = user
                 request.auth_type = 'api_key'
@@ -163,7 +159,7 @@ def api_auth_required(f):
             else:
                 return jsonify({'success': False, 'error': 'Invalid API key'}), 401
         
-        # 如果没有API Key，检查Session（用于浏览器访问）
+        # 检查Session（用于浏览器访问）
         if 'user_id' in session:
             user = get_user_by_id(session['user_id'])
             if user:
@@ -203,7 +199,6 @@ def get_user_by_username(username):
     return dict(user) if user else None
 
 def get_user_by_api_key(api_key):
-    """通过API Key获取用户"""
     db = get_db()
     result = db.execute('''
         SELECT u.* FROM users u
@@ -214,7 +209,6 @@ def get_user_by_api_key(api_key):
     return dict(result) if result else None
 
 def update_api_key_last_used(api_key):
-    """更新API Key最后使用时间"""
     db = get_db()
     db.execute('UPDATE api_keys SET last_used = ? WHERE key = ?', 
                (datetime.now().isoformat(), api_key))
@@ -222,11 +216,9 @@ def update_api_key_last_used(api_key):
     db.close()
 
 def generate_api_key():
-    """生成安全的API Key"""
     return 'sgd_' + secrets.token_urlsafe(32)
 
 def get_user_api_keys(user_id):
-    """获取用户的所有API Keys"""
     db = get_db()
     keys = db.execute('''
         SELECT * FROM api_keys 
@@ -313,8 +305,6 @@ def logout():
 def upload():
     if request.method == 'POST':
         title = request.form['title']
-        description = request.form.get('description', '')
-        category = request.form.get('category', 'general')
         
         if 'torrent' not in request.files:
             flash('没有选择文件', 'danger')
@@ -335,18 +325,16 @@ def upload():
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
         file.save(file_path)
         
-        # 保存种子信息到数据库
+        # 保存到数据库
         db = get_db()
         db.execute('''
-            INSERT INTO torrents (id, title, description, category, filename, 
+            INSERT INTO torrents (id, title, filename, 
                                 original_filename, file_size, created_at, 
                                 publisher_id, publisher_name)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             str(uuid.uuid4()),
             title,
-            description,
-            category,
             unique_filename,
             filename,
             os.path.getsize(file_path),
@@ -402,7 +390,7 @@ def rss_feed():
     # 频道信息
     ET.SubElement(channel, 'title').text = os.getenv('SITE_NAME', 'RSS种子站点')
     ET.SubElement(channel, 'link').text = request.url_root
-    ET.SubElement(channel, 'description').text = '自动下载种子RSS源'
+    ET.SubElement(channel, 'description').text = 'RSS种子订阅'
     ET.SubElement(channel, 'language').text = 'zh-CN'
     ET.SubElement(channel, 'lastBuildDate').text = datetime.now().strftime('%a, %d %b %Y %H:%M:%S +0800')
     
@@ -419,7 +407,6 @@ def rss_feed():
         
         ET.SubElement(item, 'title').text = torrent['title']
         ET.SubElement(item, 'link').text = url_for('download', torrent_id=torrent['id'], _external=True)
-        ET.SubElement(item, 'description').text = torrent['description'] or torrent['title']
         ET.SubElement(item, 'pubDate').text = datetime.fromisoformat(torrent['created_at']).strftime('%a, %d %b %Y %H:%M:%S +0800')
         ET.SubElement(item, 'guid').text = torrent['id']
         
@@ -428,11 +415,6 @@ def rss_feed():
         enclosure.set('url', url_for('download', torrent_id=torrent['id'], _external=True))
         enclosure.set('length', str(torrent['file_size']))
         enclosure.set('type', 'application/x-bittorrent')
-        
-        # 类别
-        if torrent.get('category'):
-            category = ET.SubElement(item, 'category')
-            category.text = torrent['category']
     
     # 转换为字符串
     xml_string = ET.tostring(rss, encoding='unicode')
@@ -533,7 +515,7 @@ def create_api_key():
     db.commit()
     db.close()
     
-    flash(f'API Key 创建成功！请立即复制保存，这是唯一一次显示：{api_key}', 'success')
+    flash(f'API Key 创建成功！请立即复制保存：{api_key}', 'success')
     return redirect(url_for('api_keys'))
 
 @app.route('/api-keys/delete/<key_id>')
@@ -568,10 +550,7 @@ def api_get_torrents():
         # 分页参数
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 20, type=int)
-        per_page = min(per_page, 100)  # 最大100条
-        
-        # 分类过滤
-        category = request.args.get('category')
+        per_page = min(per_page, 100)
         
         # 搜索
         search = request.args.get('search')
@@ -582,13 +561,9 @@ def api_get_torrents():
         query = 'SELECT * FROM torrents WHERE 1=1'
         params = []
         
-        if category:
-            query += ' AND category = ?'
-            params.append(category)
-        
         if search:
-            query += ' AND (title LIKE ? OR description LIKE ?)'
-            params.extend([f'%{search}%', f'%{search}%'])
+            query += ' AND title LIKE ?'
+            params.append(f'%{search}%')
         
         # 获取总数
         count_query = query.replace('SELECT *', 'SELECT COUNT(*) as total')
@@ -608,8 +583,6 @@ def api_get_torrents():
             results.append({
                 'id': t['id'],
                 'title': t['title'],
-                'description': t['description'],
-                'category': t['category'],
                 'file_size': t['file_size'],
                 'file_size_human': f"{t['file_size'] / 1024 / 1024:.2f} MB",
                 'created_at': t['created_at'],
@@ -639,12 +612,8 @@ def api_get_torrents():
 def api_upload_torrent():
     """通过API上传种子"""
     try:
-        # 获取数据
         if request.content_type and 'multipart/form-data' in request.content_type:
-            # 表单上传
             title = request.form.get('title')
-            description = request.form.get('description', '')
-            category = request.form.get('category', 'general')
             
             if 'torrent' not in request.files:
                 return jsonify({'success': False, 'error': 'No torrent file provided'}), 400
@@ -653,16 +622,6 @@ def api_upload_torrent():
             if file.filename == '':
                 return jsonify({'success': False, 'error': 'No torrent file selected'}), 400
         else:
-            # JSON上传（需要提供URL或base64）
-            data = request.get_json()
-            if not data:
-                return jsonify({'success': False, 'error': 'No data provided'}), 400
-            
-            title = data.get('title')
-            description = data.get('description', '')
-            category = data.get('category', 'general')
-            
-            # 这里可以扩展支持URL下载或base64解码
             return jsonify({'success': False, 'error': 'Please use multipart/form-data to upload torrent files'}), 400
         
         if not title:
@@ -678,15 +637,13 @@ def api_upload_torrent():
         torrent_id = str(uuid.uuid4())
         db = get_db()
         db.execute('''
-            INSERT INTO torrents (id, title, description, category, filename, 
+            INSERT INTO torrents (id, title, filename, 
                                 original_filename, file_size, created_at, 
                                 publisher_id, publisher_name)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             torrent_id,
             title,
-            description,
-            category,
             unique_filename,
             filename,
             os.path.getsize(file_path),
@@ -728,35 +685,12 @@ def api_get_torrent(torrent_id):
             'data': {
                 'id': t['id'],
                 'title': t['title'],
-                'description': t['description'],
-                'category': t['category'],
                 'file_size': t['file_size'],
                 'file_size_human': f"{t['file_size'] / 1024 / 1024:.2f} MB",
                 'created_at': t['created_at'],
                 'publisher_name': t['publisher_name'],
                 'download_url': url_for('download', torrent_id=t['id'], _external=True)
             }
-        })
-    
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/api/v1/categories', methods=['GET'])
-def api_get_categories():
-    """获取所有分类"""
-    try:
-        db = get_db()
-        categories = db.execute('''
-            SELECT category, COUNT(*) as count 
-            FROM torrents 
-            GROUP BY category 
-            ORDER BY count DESC
-        ''').fetchall()
-        db.close()
-        
-        return jsonify({
-            'success': True,
-            'data': [dict(c) for c in categories]
         })
     
     except Exception as e:

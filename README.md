@@ -11,7 +11,7 @@
 ## ✨ 功能特性
 
 - 🔐 **用户系统** - 注册/登录，支持三种角色：管理员、发布员、普通用户
-- 📤 **种子发布** - 发布员可上传 `.torrent` 文件，自动分类管理
+- 📤 **种子发布** - 发布员可上传 `.torrent` 文件
 - 📡 **RSS订阅** - 自动生成标准RSS feed，支持qBittorrent自动下载
 - 🔌 **API接口** - 完整的RESTful API，支持第三方应用对接
 - 🔑 **API Key管理** - 用户可创建/管理API Key，安全对接外部应用
@@ -155,7 +155,7 @@ python -c "import secrets; print(secrets.token_hex(32))"
 ### 4. 发布种子
 
 - 发布员登录后，点击"发布种子"
-- 填写标题、选择分类、上传 `.torrent` 文件
+- 填写标题、上传 `.torrent` 文件
 - 支持文件大小：最大16MB
 
 ### 5. 订阅RSS（qBittorrent）
@@ -194,7 +194,6 @@ curl -X POST \
   -H "X-API-Key: your-api-key" \
   -F "torrent=@movie.torrent" \
   -F "title=电影名称" \
-  -F "category=movie" \
   http://your-domain.com/api/v1/torrents
 ```
 
