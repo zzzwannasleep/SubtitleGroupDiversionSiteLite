@@ -6,7 +6,7 @@ set -e
 if [ "$(id -u)" = "0" ]; then
     mkdir -p /app/data /app/uploads
     chown -R appuser:appuser /app/data /app/uploads 2>/dev/null || true
-    chmod -R u+w /app/data /app/uploads 2>/dev/null || true
+    chmod -R 777 /app/data /app/uploads 2>/dev/null || true
     exec su-exec appuser "$@"
 else
     exec "$@"
