@@ -23,47 +23,69 @@
 - CDN 命中不消耗 R2 读操作；未命中才回源（R2 免费 1000 万次读/月）。
 - `rss.xml` 设 `max-age=60`。即使没配置清缓存，最多也只延迟 1 分钟。
 
-## 部署
+## 部署（Cloudflare 网页后台）
 
-需要：Node.js、[uv](https://docs.astral.sh/uv/)、一个托管在 Cloudflare 的域名。
+仓库里的 `wrangler.jsonc` 不含任何 ID、域名或密钥。D1 和 R2 在首次部署时自动创建并绑定，**不要在后台手动添加绑定**，否则下次部署会被覆盖。
+
+### 1. R2 桶和公开域名
+
+R2 → 创建存储桶 `sgds` → 设置 → 自定义域 → 连接一个子域名，例如 `files.你的域名`。
+
+不要用 `r2.dev`，官方说明它限速、仅供开发。
+
+### 2. 导入仓库
+
+Workers 和 Pages → 创建 → 导入存储库 → 选这个仓库：
+
+| 项 | 填写 |
+|---|---|
+| 项目名称 | `subtitle-group-diversion-site`（必须和 wrangler.jsonc 的 `name` 一致） |
+| 构建命令 | 留空 |
+| 部署命令 | `npm ci && python -m pip install uv && python -m uv run pywrangler deploy` |
+
+首次部署会自动创建 D1 数据库 `sgds`，并绑定 `DB`、`BUCKET`。
+
+### 3. 变量和机密
+
+Worker → 设置 → 变量和机密：
+
+| 名称 | 类型 | 必填 | 值 |
+|---|---|---|---|
+| `PUBLIC_URL` | 文本 | ✅ | 第 1 步的域名，如 `https://files.你的域名` |
+| `SECRET_KEY` | 密钥 | ✅ | 随机长字符串，用于签名登录 cookie |
+| `ADMIN_PASSWORD` | 密钥 | ✅ | admin 的密码；改这个值就是改密码 |
+| `SITE_NAME` | 文本 | | 站点名，默认"RSS种子站点" |
+| `CF_API_TOKEN` | 密钥 | | 权限选 Zone → Cache Purge；配了才会发布后立刻清 RSS 缓存 |
+| `CF_ZONE_ID` | 文本 | | `PUBLIC_URL` 所在域名的 Zone ID（域名概览页右下角） |
+
+缺少必填项时，站点会返回 500，并提示缺的是哪一项。`wrangler.jsonc` 里设了 `keep_vars`，后续部署不会覆盖这些变量。
+
+### 4. 建表
+
+D1 → `sgds` → 控制台：把 [schema.sql](schema.sql) 的内容粘进去执行。这一步会同时创建默认管理员 `admin`。
+
+### 5. 缓存规则（必做）
+
+域名 → 缓存 → Cache Rules → 新建：
+
+- 条件：`主机名 等于 files.你的域名`
+- 动作：`符合缓存条件`
+- 边缘 TTL：`如果存在则使用 Cache-Control 标头`
+
+Cloudflare 默认不缓存 `.xml` / `.torrent`，不加这条规则，每次订阅轮询都会回源 R2。
+
+### 命令行部署（可选）
 
 ```bash
-npm install
-npx wrangler login
-
-# 1. 建库、建桶
-npx wrangler d1 create sgds          # 记下输出的 database_id
-npx wrangler r2 bucket create sgds
-
-# 2. 配置
-cp wrangler.example.jsonc wrangler.jsonc   # 填 database_id 和 PUBLIC_URL
-
-# 3. 建表（同时创建默认管理员 admin）
-npx wrangler d1 execute DB --remote --file schema.sql
-
-# 4. 密钥
-npx wrangler secret put SECRET_KEY        # 随机长字符串，用于签名登录 cookie
-npx wrangler secret put ADMIN_PASSWORD    # admin 的密码；改这个 secret 就是改密码
-npx wrangler secret put CF_API_TOKEN      # 可选，权限：Zone → Cache Purge
-npx wrangler secret put CF_ZONE_ID        # 可选，PUBLIC_URL 所在域名的 Zone ID
-
-# 5. 发布
+npm install && npx wrangler login
+npx wrangler secret put SECRET_KEY    # 其余变量同上表
 npm run deploy
 ```
-
-然后在 Cloudflare 后台完成两件事，**缺一不可**：
-
-1. **R2 → sgds → Settings → Custom Domains**：绑定 `PUBLIC_URL` 里的域名（如 `files.你的域名`）。
-   不要用 `r2.dev`，官方说明它限速、仅供开发。
-2. **域名 → Caching → Cache Rules**：新建规则，条件 `Hostname equals files.你的域名`，动作 `Eligible for cache`，Edge TTL 选 `Use cache-control header if present`。
-   Cloudflare 默认不缓存 `.xml` / `.torrent`，不加这条规则，每次订阅轮询都会回源 R2。
-
-`CF_API_TOKEN` 和 `CF_ZONE_ID` 都配置后，发布或删除种子会立刻清掉 `rss.xml` 的缓存；没配置时，最多延迟 60 秒。
 
 ## 本地开发
 
 ```bash
-cp .dev.vars.example .dev.vars      # 本地测试请设 ADMIN_PASSWORD=adminpw
+cp .dev.vars.example .dev.vars      # 冒烟测试要求 ADMIN_PASSWORD=adminpw、PUBLIC_URL=https://files.example.com
 npx wrangler d1 execute DB --local --file schema.sql
 npm run dev                          # http://127.0.0.1:8787
 python scripts/smoke_test.py         # 端到端冒烟测试：登录/上传/RSS/API/权限/删除

@@ -1,0 +1,13 @@
+// Safe to commit: no IDs, domains or secrets here.
+// D1/R2 are auto-provisioned on first deploy and stay linked afterwards.
+// PUBLIC_URL / SITE_NAME are set in the dashboard (keep_vars keeps them across deploys).
+{
+  "name": "subtitle-group-diversion-site",
+  "main": "src/entry.py",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["python_workers"],
+  "observability": { "enabled": true },
+  "keep_vars": true,
+  "d1_databases": [{ "binding": "DB", "database_name": "sgds" }],
+  "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "sgds" }]
+}

@@ -622,6 +622,9 @@ ROUTES = [(methods.split(), re.compile(pattern + r"\Z"), handler) for methods, p
 class Default(WorkerEntrypoint):
     async def fetch(self, request):
         c = Ctx(request, self.env)
+        missing = [name for name in ("PUBLIC_URL", "SECRET_KEY", "ADMIN_PASSWORD") if not c.var(name)]
+        if missing:
+            return Response(f"未配置：{', '.join(missing)}（Worker → 设置 → 变量和机密）", status=500)
         is_api = c.path.startswith("/api/")
         for methods, pattern, handler in ROUTES:
             m = pattern.match(c.path)
