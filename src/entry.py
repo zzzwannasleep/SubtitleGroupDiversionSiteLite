@@ -624,7 +624,7 @@ class Default(WorkerEntrypoint):
         c = Ctx(request, self.env)
         missing = [name for name in ("PUBLIC_URL", "SECRET_KEY", "ADMIN_PASSWORD") if not c.var(name)]
         if missing:
-            return Response(f"未配置：{', '.join(missing)}（Worker → 设置 → 变量和机密）", status=500)
+            return Response(f"未配置：{', '.join(missing)}（Worker → 设置 → Runtime variables and secrets 运行时变量和机密，不是构建变量）", status=500)
         is_api = c.path.startswith("/api/")
         for methods, pattern, handler in ROUTES:
             m = pattern.match(c.path)

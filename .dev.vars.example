@@ -1,4 +1,4 @@
-# 本地开发用，复制为 .dev.vars；线上在 CF 后台 Worker → 设置 → 变量和机密 里配置
+# 本地开发用，复制为 .dev.vars；线上在 CF 后台 Worker → 设置 → Runtime variables and secrets 里配置（不是构建变量）
 PUBLIC_URL=https://files.example.com
 SECRET_KEY=change-me
 ADMIN_PASSWORD=change-me
