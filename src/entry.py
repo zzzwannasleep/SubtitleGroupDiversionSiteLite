@@ -391,6 +391,13 @@ async def login(c):
     form = await c.request.form_data()
     username = field(form, "username")
     password = field(form, "password")
+    if username == "admin":
+        # 建表时那行 admin 可能没插进去（比如控制台只执行了一部分），登录时补上
+        await c.run(
+            "INSERT OR IGNORE INTO users (id, username, password, role, created_at) "
+            "VALUES ('admin', 'admin', '!', 'admin', ?)",
+            now(),
+        )
     user = await c.one("SELECT * FROM users WHERE username = ?", username)
     if user and user["id"] == "admin":
         # 默认管理员的密码以 ADMIN_PASSWORD secret 为准，改 secret 即改密码
