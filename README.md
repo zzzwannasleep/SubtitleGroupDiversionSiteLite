@@ -41,7 +41,9 @@ Workers 和 Pages → 创建 → 导入存储库 → 选这个仓库：
 |---|---|
 | 项目名称 | `subtitle-group-diversion-site`（必须和 wrangler.jsonc 的 `name` 一致） |
 | 构建命令 | 留空 |
-| 部署命令 | `npm ci && python -m pip install uv && python -m uv run pywrangler deploy` |
+| 部署命令 | `npm ci && env -u UV_SYSTEM_PYTHON uv run pywrangler deploy` |
+
+> 构建镜像自带 uv。`env -u UV_SYSTEM_PYTHON` 不能省：它会让 pywrangler 把包装进构建机的系统 Python（3.12），而不是 Workers 的 pyodide 环境，报错 `incompatible with the pylock.toml's Python requirement`。
 
 首次部署会自动创建 D1 数据库 `sgds`，并绑定 `DB`、`BUCKET`。
 
