@@ -84,6 +84,22 @@ npx wrangler secret put SECRET_KEY    # 其余变量同上表
 npm run deploy
 ```
 
+## 从旧版（Flask）迁移数据
+
+需要旧站的 `site.db` 和 `uploads/` 目录。先在本地 `npx wrangler login`，然后：
+
+```bash
+python scripts/migrate.py 旧的site.db 旧的uploads目录   # 种子直接传到 R2，同时生成 migrate.sql
+npx wrangler d1 execute DB --remote --file migrate.sql  # 报 missing a database_id 就把内容粘到 D1 控制台执行
+```
+
+最后在管理后台点「重建 RSS」。
+
+- **种子**：按新格式上传到 R2，文件缺失的会跳过并提示。
+- **API Key**：原样保留，发布脚本不用改。
+- **用户**：旧密码哈希无法迁移，每人分配一个临时密码，写在 `migrate-passwords.txt` 里，转交后删除。admin 仍然用 `ADMIN_PASSWORD` 登录。
+- **时间**：旧 Docker 部署存的是 UTC，脚本会转成北京时间。旧站如果是直接跑在北京时间的服务器上，加 `--tz +08:00`。
+
 ## 本地开发
 
 ```bash

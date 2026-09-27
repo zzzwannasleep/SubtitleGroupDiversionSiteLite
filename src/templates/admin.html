@@ -101,5 +101,7 @@
     </div>
     <p style="margin-top: 15px;"><strong>种子总数：</strong> {{ torrents|length }}</p>
     <p><strong>用户总数：</strong> {{ users|length }}</p>
+    <p style="margin-top: 15px;"><a href="{{ url_for('rebuild_rss') }}" class="btn btn-primary btn-sm">重建 RSS</a>
+        <small style="color: #666;">迁移数据或修改 PUBLIC_URL 后点一次</small></p>
 </div>
 {% endblock %}

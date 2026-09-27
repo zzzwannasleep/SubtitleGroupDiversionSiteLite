@@ -12,3 +12,7 @@ __pycache__/
 .uv-python/
 .uv-cache/
 pylock.toml
+
+# 迁移产物（含临时密码）
+migrate.sql
+migrate-passwords.txt

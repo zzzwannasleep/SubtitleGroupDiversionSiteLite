@@ -461,6 +461,14 @@ async def delete_torrent(c, torrent_id):
     return c.redirect("admin")
 
 
+@login_required("admin")
+async def rebuild_rss(c):
+    """迁移数据或改了 PUBLIC_URL 之后，手动重建 rss.xml"""
+    await publish_rss(c)
+    c.flash("RSS 已重建", "success")
+    return c.redirect("admin")
+
+
 @login_required()
 async def api_keys(c):
     keys = await c.all(
@@ -592,6 +600,7 @@ PAGE_URLS = {
     "logout": "/logout",
     "upload": "/upload",
     "admin": "/admin",
+    "rebuild_rss": "/admin/rebuild_rss",
     "api_keys": "/api-keys",
     "create_api_key": "/api-keys/create",
     "api_docs": "/api/docs",
@@ -606,6 +615,7 @@ ROUTES = [
     ("GET", r"/admin", admin),
     ("GET", r"/admin/set_role/(?P<user_id>[^/]+)/(?P<role>[^/]+)", set_role),
     ("GET", r"/admin/delete_torrent/(?P<torrent_id>[^/]+)", delete_torrent),
+    ("GET", r"/admin/rebuild_rss", rebuild_rss),
     ("GET", r"/api-keys", api_keys),
     ("POST", r"/api-keys/create", create_api_key),
     ("GET", r"/api-keys/delete/(?P<key_id>[^/]+)", delete_api_key),
