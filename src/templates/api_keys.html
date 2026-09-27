@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}API Key 管理 - RSS种子站点{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>🔑 API Key 管理</h2>
+        <p style="color: #666; margin-top: 10px;">
+            API Key 用于第三方应用对接，请妥善保管，不要泄露给他人。
+        </p>
+    </div>
+    
+    <!-- 创建新API Key -->
+    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 30px;">
+        <h3>创建新的 API Key</h3>
+        <form method="POST" action="{{ url_for('create_api_key') }}">
+            <div class="form-group" style="display: flex; gap: 10px; align-items: flex-end;">
+                <div style="flex: 1;">
+                    <label>Key 名称（用于标识）</label>
+                    <input type="text" name="name" class="form-control" placeholder="例如：qBittorrent自动上传" required>
+                </div>
+                <button type="submit" class="btn btn-success" style="margin-bottom: 0;">➕ 创建 API Key</button>
+            </div>
+        </form>
+    </div>
+    
+    <!-- API Key列表 -->
+    <h3>我的 API Keys</h3>
+    
+    {% if api_keys %}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>名称</th>
+                    <th>API Key</th>
+                    <th>创建时间</th>
+                    <th>最后使用</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for key in api_keys %}
+                <tr>
+                    <td>{{ key.name }}</td>
+                    <td>
+                        <code style="background: #f8f9fa; padding: 4px 8px; border-radius: 4px; font-size: 0.85em;">
+                            {{ key.key[:20] }}...
+                        </code>
+                    </td>
+                    <td>{{ key.created_at[:19] }}</td>
+                    <td>{{ key.last_used[:19] if key.last_used else '从未使用' }}</td>
+                    <td>
+                        {% if key.is_active %}
+                            <span style="color: #27ae60; font-weight: bold;">✓ 活跃</span>
+                        {% else %}
+                            <span style="color: #e74c3c;">✗ 已禁用</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{{ url_for('delete_api_key', key_id=key.id) }}" 
+                           class="btn btn-danger btn-sm"
+                           onclick="return confirm('确定删除此 API Key 吗？关联的应用将无法访问。')">删除</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <div style="text-align: center; padding: 40px; color: #666;">
+            <p>📭 暂无 API Key</p>
+            <p>创建一个 API Key 来对接第三方应用</p>
+        </div>
+    {% endif %}
+    
+    <!-- 使用说明 -->
+    <div style="margin-top: 30px; padding: 20px; background: #e8f4f8; border-radius: 8px; border-left: 4px solid #3498db;">
+        <h4>📖 使用说明</h4>
+        <ol style="margin-top: 10px; padding-left: 20px; line-height: 1.8;">
+            <li>创建 API Key 后，<strong>请立即复制保存</strong>，这是唯一一次完整显示</li>
+            <li>在第三方应用中使用此 Key 进行 API 认证</li>
+            <li>支持通过 Header (<code>X-API-Key</code>)、Query参数或 JSON body 传递</li>
+            <li>如 Key 泄露，请立即删除并重新创建</li>
+            <li>查看 <a href="{{ url_for('api_docs') }}">API 文档</a> 了解详细对接方法</li>
+        </ol>
+    </div>
+</div>
+{% endblock %}

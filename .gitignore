@@ -1,0 +1,16 @@
+# 本地配置（含域名、D1 id 等，不进版本控制）
+wrangler.jsonc
+.dev.vars*
+!.dev.vars.example
+
+node_modules/
+.wrangler/
+python_modules/
+.venv/
+.venv-workers/
+__pycache__/
+
+# uv（Windows 非 C 盘时用于同盘放置 Python/缓存）
+.uv-python/
+.uv-cache/
+pylock.toml
