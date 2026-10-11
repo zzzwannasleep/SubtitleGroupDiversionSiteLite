@@ -1,0 +1,44 @@
+# RSS种子站点 Docker 自部署
+#
+# 用法：
+#   cd docker
+#   cp .env.example .env      # 至少把 ADMIN_PASSWORD 改掉
+#   docker compose up -d --build
+#
+# RSS/下载链接 = PUBLIC_URL + /rss.xml、/t/<id>.torrent，就是站点对外地址本身，
+# 不需要 Cloudflare 那种独立的文件域名。
+#
+# 注意：容器启动时 workerd 会从 Cloudflare 边缘拉取一次 Pyodide 运行时
+# （pyodide-capnp-bin.edgeworker.net），宿主机需允许该域名出站。
+#
+# 数据（本地 D1 SQLite + R2 模拟）固定存在名为 sgds-state 的数据卷里，
+# 备份/迁移就是备份这个卷。
+name: sgds
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: subtitle-group-diversion-site:latest
+    container_name: sgds
+    init: true
+    ports:
+      # 宿主端口可通过 .env 的 SGDS_PORT 修改；改了端口要同步改 PUBLIC_URL
+      - "${SGDS_PORT:-8787}:8787"
+    environment:
+      # 站点对外地址前缀：rss 链接 = 它 + /rss.xml，种子下载 = 它 + /t/<id>.torrent
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8787}
+      # 必填：管理员密码（admin 账号用它登录）
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      # 可选：不填则首次启动自动生成并保存在数据卷里
+      SECRET_KEY: ${SECRET_KEY:-}
+      # 可选：站点名，默认“RSS种子站点”
+      SITE_NAME: ${SITE_NAME:-}
+    volumes:
+      - sgds-state:/data/state
+    restart: unless-stopped
+
+volumes:
+  sgds-state:
+    name: sgds-state

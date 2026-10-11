@@ -1,6 +1,10 @@
 .dev.vars*
 !.dev.vars.example
 
+# Docker 自部署配置（含密码/密钥）
+.env
+!.env.example
+
 node_modules/
 .wrangler/
 python_modules/

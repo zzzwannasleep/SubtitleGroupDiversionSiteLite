@@ -1,0 +1,32 @@
+# 本地与宿主环境产物：镜像内全部重建，禁止带入
+.git/
+.gitignore
+.wrangler/
+.dev.vars
+.dev.vars.example
+.venv/
+.venv-workers/
+.uv-cache/
+.uv-python/
+python_modules/
+node_modules/
+**/__pycache__/
+**/*.pyc
+
+# 秘密与迁移产物，禁止打进镜像
+.env
+.env.*
+migrate-passwords.txt
+migrate.sql
+site.db
+*.sqlite
+
+# Docker 自身文件（不影响构建）
+Dockerfile
+docker-compose.yml
+
+# macOS / 编辑器
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

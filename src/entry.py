@@ -571,6 +571,43 @@ async def api_docs(c):
     return c.render("api_docs.html", base_url=c.origin, rss_url=c.url_for("rss_feed"))
 
 
+# ---------- R2 直出兜底（自部署用） ----------
+
+async def serve_rss(c):
+    """直接输出 rss.xml。
+
+    Cloudflare 部署时这个路径由 R2 公开域名直出、不进 Worker（见 README），
+    不受影响；自部署（Docker：PUBLIC_URL 指向本 Worker）时由这里提供，
+    响应头与写入 R2 时的 httpMetadata 一致。
+    """
+    obj = await c.env.BUCKET.get(RSS_KEY)
+    if not obj:
+        return Response("Not Found", status=404)
+    return Response(
+        bytes(await obj.arrayBuffer()),
+        headers={
+            "Content-Type": "application/rss+xml; charset=utf-8",
+            "Cache-Control": "public, max-age=60",
+        },
+    )
+
+
+async def serve_torrent(c, torrent_id):
+    """直接下载种子文件。记录不存在或 R2 对象缺失都按 CF R2 域名一样返回 404。"""
+    t = await c.one("SELECT original_filename FROM torrents WHERE id = ?", torrent_id)
+    obj = None if not t else await c.env.BUCKET.get(f"t/{torrent_id}.torrent")
+    if not obj:
+        return Response("Not Found", status=404)
+    return Response(
+        bytes(await obj.arrayBuffer()),
+        headers={
+            "Content-Type": "application/x-bittorrent",
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(t['original_filename'])}",
+            "Cache-Control": "public, max-age=31536000, immutable",
+        },
+    )
+
+
 # ==================== API ====================
 
 @api_auth()
@@ -696,6 +733,10 @@ ROUTES = [
     ("GET", r"/api/v1/torrents/(?P<torrent_id>[^/]+)", api_get_torrent),
     ("GET", r"/api/v1/stats", api_get_stats),
     ("GET", r"/api/v1/user", api_get_user),
+    # R2 直出兜底：Cloudflare 上这两个路径由 R2 公开域名直出、不进 Worker；
+    # 自部署（Docker，PUBLIC_URL 指向本 Worker）时靠它们提供 RSS 与种子下载。
+    ("GET", r"/rss\.xml", serve_rss),
+    ("GET", r"/t/(?P<torrent_id>[^/]+)\.torrent", serve_torrent),
 ]
 ROUTES = [(methods.split(), re.compile(pattern + r"\Z"), handler) for methods, pattern, handler in ROUTES]
 
