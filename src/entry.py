@@ -24,6 +24,8 @@ from js import Object, Uint8Array, crypto
 from pyodide.ffi import to_js
 from workers import File, Response, WorkerEntrypoint, fetch
 
+from episode_match import classify, parse_season, parse_torrent_info, seasons_compatible, series_key
+
 CST = timezone(timedelta(hours=8))
 MAX_TORRENT_SIZE = 16 * 1024 * 1024
 PBKDF2_ITERATIONS = 100_000  # workerd 的 WebCrypto 上限
@@ -203,8 +205,51 @@ def torrent_json(c, t):
         "file_size_human": f"{t['file_size'] / 1024 / 1024:.2f} MB",
         "created_at": t["created_at"],
         "publisher_name": t["publisher_name"],
+        "is_collection": bool(t["is_collection"]),
         "download_url": c.url_for("download", torrent_id=t["id"]),
     }
+
+
+# ==================== 合集 / 分集 ====================
+
+async def _ensure_episode_columns(c):
+    """老库补列（is_collection / series_key / season）。列已存在时 ALTER 报错，忽略。"""
+    for statement in (
+        "ALTER TABLE torrents ADD COLUMN is_collection INTEGER",
+        "ALTER TABLE torrents ADD COLUMN series_key TEXT",
+        "ALTER TABLE torrents ADD COLUMN season INTEGER",
+    ):
+        try:
+            await c.run(statement)
+        except Exception:
+            pass
+
+
+async def remove_matching_episodes(c, title):
+    """合集上线：删掉命名相同的分集。返回被删的种子行列表。
+
+    匹配规则见 src/episode_match.py：系列键相同 + 季号兼容才动手；
+    is_collection 未知的旧记录按标题再分类一次，防止误删别的合集。
+    """
+    col_key = series_key(title, is_collection=True)
+    if not col_key:
+        return []
+    col_season = parse_season(title)
+    candidates = await c.all(
+        "SELECT id, title, filename FROM torrents WHERE is_collection IS NOT 1"
+    )
+    removed = []
+    for row in candidates:
+        if classify(row["title"]):  # 标题含合集关键词的旧记录不当分集删
+            continue
+        if series_key(row["title"]) == col_key and seasons_compatible(
+            parse_season(row["title"]), col_season
+        ):
+            removed.append(row)
+    for row in removed:
+        await c.env.BUCKET.delete(row["filename"])
+        await c.run("DELETE FROM torrents WHERE id = ?", row["id"])
+    return removed
 
 
 # ==================== 权限 ====================
@@ -319,21 +364,28 @@ async def publish_rss(c, extra_purge=()):
 
 
 async def save_torrent(c, form, user):
-    """校验并保存上传的种子，返回 (torrent_id, None) 或 (None, 错误信息)"""
+    """校验并保存上传的种子，返回 (torrent_id, None, 已删分集) 或 (None, 错误信息, [])"""
     title = field(form, "title").strip()
     file = form.get("torrent")
     if not isinstance(file, File) or not file.name:
-        return None, "没有选择文件"
+        return None, "没有选择文件", []
     if not title:
-        return None, "标题不能为空"
+        return None, "标题不能为空", []
     filename = file.name.replace("\\", "/").rsplit("/", 1)[-1]
     if not filename.lower().endswith(".torrent"):
-        return None, "仅支持 .torrent 文件"
+        return None, "仅支持 .torrent 文件", []
     if file.size > MAX_TORRENT_SIZE:
-        return None, "文件超过 16MB"
+        return None, "文件超过 16MB", []
     data = await file.bytes()
     if not data.startswith(b"d"):  # bencode 字典
-        return None, "不是有效的种子文件"
+        return None, "不是有效的种子文件", []
+
+    # 解析种子内容：判断是合集还是分集，并算出系列键（命名相同 ⇒ 同一系列）
+    info = parse_torrent_info(data)
+    file_count = info["file_count"] if info else None
+    is_collection = classify(title, file_count)
+    torrent_series_key = series_key(title, is_collection=is_collection) if title else None
+    season = parse_season(title)
 
     torrent_id = str(uuid.uuid4())
     key = f"t/{torrent_id}.torrent"
@@ -351,11 +403,19 @@ async def save_torrent(c, form, user):
     )
     await c.run(
         "INSERT INTO torrents (id, title, filename, original_filename, file_size, "
-        "created_at, publisher_id, publisher_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "created_at, publisher_id, publisher_name, is_collection, series_key, season) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         torrent_id, title, key, filename, len(data), now(), user["id"], user["username"],
+        1 if is_collection else 0, torrent_series_key, season,
     )
-    await publish_rss(c)
-    return torrent_id, None
+
+    # 合集上线：自动清掉命名相同的分集，只留合集
+    removed = []
+    if is_collection:
+        removed = await remove_matching_episodes(c, title)
+
+    await publish_rss(c, [c.url_for("download", torrent_id=r["id"]) for r in removed])
+    return torrent_id, None, removed
 
 
 # ==================== 页面路由 ====================
@@ -423,11 +483,14 @@ async def logout(c):
 async def upload(c):
     if c.method == "GET":
         return c.render("upload.html")
-    torrent_id, error = await save_torrent(c, await c.request.form_data(), await c.user())
+    torrent_id, error, removed = await save_torrent(c, await c.request.form_data(), await c.user())
     if error:
         c.flash(error, "danger")
         return c.redirect("upload")
     c.flash("种子发布成功！", "success")
+    if removed:
+        titles = "、".join(r["title"] for r in removed)
+        c.flash(f"检测到合集种子，已自动删除 {len(removed)} 个命名相同的分集：{titles}", "warning")
     return c.redirect("index")
 
 
@@ -545,7 +608,7 @@ async def api_upload_torrent(c):
         return json_response(
             {"success": False, "error": "Please use multipart/form-data to upload torrent files"}, 400
         )
-    torrent_id, error = await save_torrent(c, await c.request.form_data(), c.current_user)
+    torrent_id, error, removed = await save_torrent(c, await c.request.form_data(), c.current_user)
     if error:
         return json_response({"success": False, "error": error}, 400)
     title = (await c.one("SELECT title FROM torrents WHERE id = ?", torrent_id))["title"]
@@ -555,6 +618,7 @@ async def api_upload_torrent(c):
             "id": torrent_id,
             "title": title,
             "download_url": c.url_for("download", torrent_id=torrent_id),
+            "removed_episodes": [{"id": r["id"], "title": r["title"]} for r in removed],
             "message": "Torrent uploaded successfully",
         },
     }, 201)
@@ -636,12 +700,19 @@ ROUTES = [
 ROUTES = [(methods.split(), re.compile(pattern + r"\Z"), handler) for methods, pattern, handler in ROUTES]
 
 
+_SCHEMA_READY = False  # 每个 isolate 冷启动补一次列；已存在时 ALTER 报错被忽略
+
+
 class Default(WorkerEntrypoint):
     async def fetch(self, request):
+        global _SCHEMA_READY
         c = Ctx(request, self.env)
         missing = [name for name in ("PUBLIC_URL", "SECRET_KEY", "ADMIN_PASSWORD") if not c.var(name)]
         if missing:
             return Response(f"未配置：{', '.join(missing)}（Worker → 设置 → Runtime variables and secrets 运行时变量和机密，不是构建变量）", status=500)
+        if not _SCHEMA_READY:
+            await _ensure_episode_columns(c)  # 老库自迁移；新库建表已带列，ALTER 失败被忽略
+            _SCHEMA_READY = True
         is_api = c.path.startswith("/api/")
         for methods, pattern, handler in ROUTES:
             m = pattern.match(c.path)

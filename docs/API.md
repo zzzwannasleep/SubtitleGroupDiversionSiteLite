@@ -127,6 +127,7 @@ GET /api/v1/torrents
         "file_size_human": "2048.00 MB",
         "created_at": "2024-01-15T10:30:00",
         "publisher_name": "username",
+        "is_collection": false,
         "download_url": "https://files.your-domain.com/t/uuid.torrent"
       }
     ],
@@ -185,10 +186,13 @@ POST /api/v1/torrents
     "id": "uuid",
     "title": "电影名称",
     "download_url": "https://files.your-domain.com/t/uuid.torrent",
+    "removed_episodes": [],
     "message": "Torrent uploaded successfully"
   }
 }
 ```
+
+**说明：** 上传**合集**种子（内含多个文件，或标题含「合集/全集」等关键词）时，站点会自动删除命名相同的分集种子，`removed_episodes` 里列出被删除的种子（`id` + `title`）；普通种子上传时为空数组。
 
 ---
 

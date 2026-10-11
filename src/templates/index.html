@@ -20,7 +20,9 @@
     {% if torrents %}
         {% for torrent in torrents %}
         <div class="torrent-item">
-            <h3>{{ torrent.title }}</h3>
+            <h3>{{ torrent.title }}
+                {% if torrent.is_collection %}<span style="background:#8e44ad;color:#fff;border-radius:3px;padding:1px 6px;font-size:0.7em;">合集</span>{% endif %}
+            </h3>
             <div class="torrent-meta">
                 <span>👤 {{ torrent.publisher_name }}</span>
                 <span>📅 {{ torrent.created_at[:19] }}</span>

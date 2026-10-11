@@ -107,6 +107,10 @@ cp .dev.vars.example .dev.vars      # 冒烟测试要求 ADMIN_PASSWORD=adminpw�
 npx wrangler d1 execute DB --local --file schema.sql
 npm run dev                          # http://127.0.0.1:8787
 python scripts/smoke_test.py         # 端到端冒烟测试：登录/上传/RSS/API/权限/删除
+python scripts/test_episode_match.py # 合集/分集匹配算法单测
+python scripts/test_qb_tool.py       # QB 清理工具计划逻辑单测
+python scripts/test_qb_e2e.py        # QB 清理工具端到端（内置 mock qBittorrent）
+python scripts/test_collection_flow.py # 合集上线自动删分集 端到端
 ```
 
 ### Windows 注意
@@ -124,6 +128,30 @@ python scripts/smoke_test.py         # 端到端冒烟测试：登录/上传/RSS
 | admin | 管理用户角色、删除种子、发布 |
 | publisher | 发布种子 |
 | user | 浏览、下载、管理自己的 API Key |
+
+## 合集 / 分集自动清理
+
+发布**合集种子**（种子内含多个文件，或标题含「合集 / 全集 / 完全版 / complete / batch」等关键词）时，站点会自动检测并删除**命名相同**的分集种子，只留合集：
+
+- 匹配规则：去掉季号、集数标记后的「系列命名」一致 + 季号兼容（见 `src/episode_match.py`，`S01E03`、`第02话`、`E04`、`Vol.1`、`01-12集`、末尾裸集数等都会被识别为分集标记）。
+- 防误删：画质/季号/系列名不同的**不会**被删；`高达00 第02话` 这种番名里带数字的也不会被误伤。
+- 被删的种子会在发布后的提示里列出，API 上传响应里带 `removed_episodes` 字段。
+- 已有部署升级：无需手动操作，Worker 冷启动会自动给 torrents 表补 `is_collection / series_key / season` 三列（或把 schema.sql 末尾注释里的 ALTER 执行一次）。
+
+### qBittorrent 配套清理工具
+
+本地运行的外部程序，检测 qBittorrent 里命名相同的分集任务并删掉，匹配规则与站点同源：
+
+```bash
+python tools/qb_episode_clean.py \
+    --url http://127.0.0.1:8080 --user admin --password 你的密码 \
+    # 可选：--category 只处理某分类；--keep-files 只删任务保留文件
+    # 可选：--site https://你的站点 --site-key sgd_xxx  以站点上的合集为基准清理
+```
+
+- **默认 dry-run**：只打印「合集 + 待删分集」报告，确认无误再加 `--apply` 真正删除。
+- 登录用的是 qBittorrent WebUI 的地址和账号密码（qBittorrent → 设置 → Web UI 里开启）。
+- 兼容合集还没被 RSS 下进 QB 的场景：给了 `--site/--site-key` 时，以站点上的合集为基准先清分集。
 
 API 文档见站内 `/api/docs` 或 [docs/API.md](docs/API.md)。
 

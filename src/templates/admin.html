@@ -72,7 +72,10 @@
         <tbody>
             {% for torrent in torrents %}
             <tr>
-                <td>{{ torrent.title }}</td>
+                <td>
+                    {{ torrent.title }}
+                    {% if torrent.is_collection %}<span style="background:#8e44ad;color:#fff;border-radius:3px;padding:1px 6px;font-size:0.85em;">合集</span>{% endif %}
+                </td>
                 <td>{{ torrent.publisher_name }}</td>
                 <td>{{ torrent.created_at[:19] }}</td>
                 <td>{{ (torrent.file_size / 1024 / 1024) | round(2) }} MB</td>

@@ -14,9 +14,21 @@ CREATE TABLE IF NOT EXISTS torrents (
     file_size INTEGER NOT NULL,
     created_at TEXT NOT NULL,
     publisher_id TEXT NOT NULL,
-    publisher_name TEXT NOT NULL
+    publisher_name TEXT NOT NULL,
+    -- 合集/分集：1=合集（内含多个文件或标题含合集关键词），0=分集，NULL=升级前的旧记录
+    is_collection INTEGER,
+    -- 系列键：去掉季号/集数标记后的“命名”，相同即视为同一系列
+    series_key TEXT,
+    -- 季号（S02 / 第2季），没有写季号为 NULL；合集与分集的季号兼容才互相取代
+    season INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_torrents_created ON torrents(created_at);
+CREATE INDEX IF NOT EXISTS idx_torrents_series ON torrents(series_key);
+
+-- 已有部署升级：把下面三条粘到 D1 控制台执行一次即可（Worker 冷启动也会自动补列）
+-- ALTER TABLE torrents ADD COLUMN is_collection INTEGER;
+-- ALTER TABLE torrents ADD COLUMN series_key TEXT;
+-- ALTER TABLE torrents ADD COLUMN season INTEGER;
 
 CREATE TABLE IF NOT EXISTS api_keys (
     id TEXT PRIMARY KEY,
